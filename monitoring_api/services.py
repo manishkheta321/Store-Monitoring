@@ -178,6 +178,7 @@ def get_store_business_hours(store_id):
             "start_time_local": bh.start_time_local,
             "end_time_local": bh.end_time_local,
         }
+    return business_hours
 
 
 def is_within_business_hours(store_timestamp, business_hours: dict):
