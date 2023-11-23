@@ -27,6 +27,10 @@ def trigger_report_generation(report_id):
     # we will query stores based on batch size, assuming there are huge number of stores.
     batch_size = 1000
     unique_store_ids = set()
+
+    # hard coding current time as max of all the logs
+    max_time = StoreStatusLog.objects.all().order_by("-timestamp").first().timestamp
+
     try:
         for offset in range(0, StoreStatusLog.objects.count(), batch_size):
             batch = StoreStatusLog.objects.values_list(
@@ -35,7 +39,9 @@ def trigger_report_generation(report_id):
             unique_store_ids.update(batch)
 
         for store_id in unique_store_ids:
-            store_data = generate_report_data_for_a_store(store_id=store_id)
+            store_data = generate_report_data_for_a_store(
+                store_id=store_id, max_time=max_time
+            )
             csv_data.append(store_data)
 
         generate_csv_file(report_id, csv_data)
@@ -46,28 +52,25 @@ def trigger_report_generation(report_id):
         report.status = ReportStatus.FAILED
 
 
-def generate_report_data_for_a_store(store_id):
+def generate_report_data_for_a_store(store_id, max_time):
     tz = get_store_timezone(store_id)
     target_timezone = pytz_timezone(tz)
 
-    # hard coding current time as max of all the logs
-    max_time = StoreStatusLog.objects.all().order_by("-timestamp").first().timestamp
-    local_time = max_time.astimezone(target_timezone)
     utc_timezone = pytz_timezone("UTC")
     utc_time = max_time.astimezone(utc_timezone)
 
     # last one hour
     last_one_hour_data = get_uptime_downtime_data(
-        store_id, utc_time, local_time, ONE_HOUR, MINUTES
+        store_id, utc_time, target_timezone, ONE_HOUR, MINUTES
     )
     # last one day
     last_one_day_data = get_uptime_downtime_data(
-        store_id, utc_time, local_time, ONE_DAY, HOUR
+        store_id, utc_time, target_timezone, ONE_DAY, HOUR
     )
 
     # last one week
     last_one_week_data = get_uptime_downtime_data(
-        store_id, utc_time, local_time, ONE_WEEK, HOUR
+        store_id, utc_time, target_timezone, ONE_WEEK, HOUR
     )
     json_data = {
         "store_id": store_id,
@@ -124,7 +127,7 @@ def generate_csv_file(report_id, csv_data):
 
 
 def get_uptime_downtime_data(
-    store_id, utc_time, current_timestamp, timegap_in_hours: int, unit: str
+    store_id, utc_time, store_tz, timegap_in_hours: int, unit: str
 ):
     data = {"uptime": 0, "downtime": 0, "unit": unit}
     business_hours = get_store_business_hours(store_id)
@@ -138,9 +141,11 @@ def get_uptime_downtime_data(
 
     for log in all_logs_in_the_time_gap.iterator(chunk_size=batch_size):
         # checkig if log is in store business hours
-        log_is_in_business_hours = is_within_business_hours(
-            log.timestamp, business_hours
-        )
+        log_ts = log.timestamp
+        local_time = log_ts.astimezone(store_tz)
+
+        # Converting utc time to local for comparision of log time with business hours
+        log_is_in_business_hours = is_within_business_hours(local_time, business_hours)
 
         # checking if log is in store business hours and status is active
         if not log_is_in_business_hours:
