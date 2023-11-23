@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.core.exceptions import ObjectDoesNotExist
 from pytz import timezone as pytz_timezone
@@ -52,7 +52,6 @@ def generate_report_data_for_a_store(store_id):
 
     # hard coding current time as max of all the logs
     max_time = StoreStatusLog.objects.all().order_by("-timestamp").first().timestamp
-    print(max_time)
     local_time = max_time.astimezone(target_timezone)
     utc_timezone = pytz_timezone("UTC")
     utc_time = max_time.astimezone(utc_timezone)
@@ -128,26 +127,13 @@ def get_uptime_downtime_data(
     store_id, utc_time, current_timestamp, timegap_in_hours: int, unit: str
 ):
     data = {"uptime": 0, "downtime": 0, "unit": unit}
-
-    current_timestamp = datetime.now()
-    current_day = current_timestamp.weekday()
-    time_before_the_gap = current_timestamp - timedelta(hours=timegap_in_hours)
-    prev_day = time_before_the_gap.weekday()
-
-    # checking if store is open in last one day
-    is_store_open = BusinessHours.objects.filter(
-        day_of_week__gte=prev_day, day_of_week__lte=current_day
-    ).exists()
-
-    if not is_store_open:
-        return data
-
     business_hours = get_store_business_hours(store_id)
 
     # getting all the logs in the time gap
     all_logs_in_the_time_gap = StoreStatusLog.objects.filter(
         timestamp__gte=utc_time - timedelta(hours=timegap_in_hours), store_id=store_id
     ).order_by("timestamp")
+
     batch_size = 1000
 
     for log in all_logs_in_the_time_gap.iterator(chunk_size=batch_size):

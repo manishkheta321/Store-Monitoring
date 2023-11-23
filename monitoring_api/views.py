@@ -2,10 +2,8 @@ from uuid import uuid4
 
 from django.http import HttpResponse, JsonResponse
 from rest_framework import views
-from rest_framework.decorators import action
 
 from .models import Report, ReportStatus
-from .serializers import ReportSerializer
 from .services import trigger_report_generation
 
 
