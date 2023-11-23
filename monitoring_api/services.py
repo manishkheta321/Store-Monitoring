@@ -192,5 +192,7 @@ def is_within_business_hours(store_timestamp, business_hours: dict):
     if business_hours_entry:
         start_time = business_hours_entry["start_time_local"]
         end_time = business_hours_entry["end_time_local"]
-        return start_time <= store_timestamp.time() and store_timestamp.time <= end_time
+        return (
+            start_time <= store_timestamp.time() and store_timestamp.time() <= end_time
+        )
     return False
